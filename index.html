@@ -11,8 +11,9 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding-bottom: 80px;
         }
+        .admin-view { padding-bottom: 80px; }
+        .public-view { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .header {
             background: rgba(255,255,255,0.1);
             backdrop-filter: blur(10px);
@@ -66,6 +67,7 @@
         }
         .btn-success { background: #4CAF50; color: white; }
         .btn-warning { background: #ff9800; color: white; }
+        .btn-danger { background: #f44336; color: white; }
         .btn-small {
             padding: 10px;
             font-size: 14px;
@@ -91,9 +93,10 @@
             padding: 15px 25px;
             border-radius: 10px;
             display: none;
-            z-index: 1000;
+            z-index: 2000;
         }
         .toast.error { background: #f44336; }
+        .toast.show { display: block; }
         .modal {
             display: none;
             position: fixed;
@@ -135,55 +138,70 @@
         .voucher-item:last-child { border-bottom: none; }
         #qrcode { text-align: center; margin: 20px 0; }
         #qrcode canvas { border-radius: 10px; }
+        .public-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .voucher-amount {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
     <div id="toast" class="toast"></div>
     
-    <div class="header">
-        <h1>🎫 Gutschein-System</h1>
-    </div>
+    <div id="adminView" class="admin-view">
+        <div class="header">
+            <h1>🎫 Gutschein-System</h1>
+        </div>
 
-    <!-- Tab 1: Gutschein erstellen -->
-    <div id="create-tab" class="content active">
-        <div class="card">
-            <h2 style="margin-bottom: 15px;">✨ Neuer Gutschein</h2>
-            <input type="number" id="amount" placeholder="Wert (CHF) *" required>
-            <input type="text" id="partnerName" placeholder="Partner/Bar *" required>
-            <input type="text" id="customerName" placeholder="Kundenname *" required>
-            <input type="email" id="customerEmail" placeholder="Kunden-Email *" required>
-            <input type="text" id="description" placeholder="Beschreibung (optional)">
-            <button class="btn btn-primary" onclick="createVoucher()">🎫 Gutschein erstellen</button>
+        <div id="create-tab" class="content active">
+            <div class="card">
+                <h2 style="margin-bottom: 15px;">✨ Neuer Gutschein</h2>
+                <input type="number" id="amount" placeholder="Wert (CHF) *" required>
+                <input type="text" id="partnerName" placeholder="Partner/Bar *" required>
+                <input type="text" id="customerName" placeholder="Kundenname *" required>
+                <input type="email" id="customerEmail" placeholder="Kunden-Email *" required>
+                <input type="text" id="description" placeholder="Beschreibung (optional)">
+                <button class="btn btn-primary" onclick="createVoucher()">🎫 Gutschein erstellen</button>
+            </div>
+        </div>
+
+        <div id="list-tab" class="content">
+            <div class="card">
+                <h2 style="margin-bottom: 15px;">📋 Alle Gutscheine</h2>
+                <select id="statusFilter" onchange="loadVouchers()" style="margin-bottom: 15px;">
+                    <option value="all">Alle</option>
+                    <option value="open">Offen (nicht bezahlt)</option>
+                    <option value="paid">Bezahlt</option>
+                    <option value="redeemed">Eingelöst</option>
+                </select>
+            </div>
+            <div id="voucherList"></div>
+        </div>
+
+        <div id="partner-tab" class="content">
+            <div id="partnerList"></div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('create')">➕<br>Erstellen</button>
+            <button class="nav-tab" onclick="switchTab('list')">📋<br>Liste</button>
+            <button class="nav-tab" onclick="switchTab('partner')">🏪<br>Partner</button>
         </div>
     </div>
 
-    <!-- Tab 2: Gutschein-Liste -->
-    <div id="list-tab" class="content">
-        <div class="card">
-            <h2 style="margin-bottom: 15px;">📋 Alle Gutscheine</h2>
-            <select id="statusFilter" onchange="loadVouchers()" style="margin-bottom: 15px;">
-                <option value="all">Alle</option>
-                <option value="open">Offen (nicht bezahlt)</option>
-                <option value="paid">Bezahlt</option>
-                <option value="redeemed">Eingelöst</option>
-            </select>
-        </div>
-        <div id="voucherList"></div>
-    </div>
+    <div id="publicView" class="public-view" style="display:none;"></div>
 
-    <!-- Tab 3: Partner-Übersicht -->
-    <div id="partner-tab" class="content">
-        <div id="partnerList"></div>
-    </div>
-
-    <!-- Navigation -->
-    <div class="nav-tabs">
-        <button class="nav-tab active" onclick="switchTab('create')">➕<br>Erstellen</button>
-        <button class="nav-tab" onclick="switchTab('list')">📋<br>Liste</button>
-        <button class="nav-tab" onclick="switchTab('partner')">🏪<br>Partner</button>
-    </div>
-
-    <!-- QR-Code Modal -->
     <div id="qrModal" class="modal">
         <div class="modal-content">
             <h3 style="text-align: center; margin-bottom: 20px;">🎫 Gutschein</h3>
@@ -199,16 +217,13 @@
         let vouchers = [];
         let currentVoucher = null;
 
-        // Toast Nachricht
         function showToast(msg, type = 'success') {
             const toast = document.getElementById('toast');
             toast.textContent = msg;
-            toast.className = `toast ${type}`;
-            toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 3000);
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.className = 'toast', 3000);
         }
 
-        // Tab wechseln
         function switchTab(tab) {
             document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -219,7 +234,6 @@
             if (tab === 'partner') loadPartners();
         }
 
-        // Code generieren
         function generateCode() {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
             let code = '';
@@ -229,7 +243,6 @@
             return code;
         }
 
-        // Gutschein erstellen
         async function createVoucher() {
             const amount = document.getElementById('amount').value;
             const partnerName = document.getElementById('partnerName').value;
@@ -247,6 +260,7 @@
             const commission = Math.max(amountNum * 0.08, 2);
 
             const voucher = {
+                action: 'create',
                 code,
                 amount: amountNum,
                 commission: parseFloat(commission.toFixed(2)),
@@ -264,7 +278,7 @@
             try {
                 const response = await fetch(BACKEND_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: 'create', ...voucher })
+                    body: JSON.stringify(voucher)
                 });
                 const result = await response.json();
                 
@@ -276,15 +290,13 @@
                     document.getElementById('customerEmail').value = '';
                     document.getElementById('description').value = '';
                 } else {
-                    showToast('Fehler: ' + (result.error || 'Unbekannter Fehler'), 'error');
+                    showToast('Fehler: ' + (result.error || 'Unbekannt'), 'error');
                 }
             } catch (error) {
-                console.error('Error:', error);
-                showToast('Verbindungsfehler! Überprüfe deine Internetverbindung.', 'error');
+                showToast('Verbindungsfehler!', 'error');
             }
         }
 
-        // Gutscheine laden
         async function loadVouchers() {
             try {
                 const response = await fetch(BACKEND_URL + '?action=list');
@@ -293,65 +305,52 @@
                 if (result.success) {
                     vouchers = result.vouchers || [];
                     displayVouchers();
-                } else {
-                    showToast('Fehler beim Laden', 'error');
                 }
             } catch (error) {
-                console.error('Error:', error);
-                showToast('Verbindungsfehler!', 'error');
+                showToast('Fehler beim Laden', 'error');
             }
         }
 
-        // Gutscheine anzeigen
         function displayVouchers() {
             const filter = document.getElementById('statusFilter').value;
             const filtered = filter === 'all' ? vouchers : vouchers.filter(v => v.status === filter);
             const container = document.getElementById('voucherList');
             
             if (filtered.length === 0) {
-                container.innerHTML = '<div class="card"><p style="text-align:center;color:#999;">Keine Gutscheine gefunden</p></div>';
+                container.innerHTML = '<div class="card"><p style="text-align:center;color:#999;">Keine Gutscheine</p></div>';
                 return;
             }
 
             container.innerHTML = filtered.map(v => `
                 <div class="card">
-                    <div class="voucher-item">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="font-size: 18px; color: #667eea;">${v.code}</strong>
-                            <span class="status-badge status-${v.status}">
-                                ${v.status === 'open' ? '⏳ Offen' : v.status === 'paid' ? '💳 Bezahlt' : '✅ Eingelöst'}
-                            </span>
-                        </div>
-                        <p><strong>${v.amount} CHF</strong> - ${v.partnerName}</p>
-                        <p style="font-size: 14px; color: #666;">Kunde: ${v.customerName}</p>
-                        <p style="font-size: 14px; color: #666;">Email: ${v.customerEmail}</p>
-                        <p style="font-size: 14px; color: #666;">Erstellt: ${new Date(v.createdAt).toLocaleDateString('de-CH')}</p>
-                        ${v.status === 'open' ? `
-                            <button class="btn btn-success btn-small" onclick="markAsPaid('${v.code}')">
-                                💳 Als bezahlt markieren
-                            </button>
-                        ` : ''}
-                        ${v.status === 'paid' ? `
-                            <button class="btn btn-primary btn-small" onclick="showQR('${v.code}')">
-                                📱 QR-Code anzeigen
-                            </button>
-                            <button class="btn btn-warning btn-small" onclick="redeemVoucher('${v.code}')">
-                                ✓ Einlösen
-                            </button>
-                        ` : ''}
-                        ${v.status === 'redeemed' ? `
-                            <p style="font-size: 14px; color: #4CAF50; margin-top: 10px;">
-                                ✓ Eingelöst am ${new Date(v.redeemedAt).toLocaleDateString('de-CH')}
-                            </p>
-                        ` : ''}
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <strong style="font-size: 18px;">${v.code}</strong>
+                        <span class="status-badge status-${v.status}">
+                            ${v.status === 'open' ? '⏳ Offen' : v.status === 'paid' ? '💳 Bezahlt' : '✅ Eingelöst'}
+                        </span>
                     </div>
+                    <p><strong>${v.amount} CHF</strong> - ${v.partnerName}</p>
+                    <p style="font-size: 14px; color: #666;">Kunde: ${v.customerName} (${v.customerEmail})</p>
+                    <p style="font-size: 14px; color: #666;">${v.description}</p>
+                    ${v.status === 'open' ? `
+                        <button class="btn btn-success btn-small" onclick="markAsPaid('${v.code}')">
+                            💳 Als bezahlt markieren
+                        </button>
+                    ` : ''}
+                    ${v.status === 'paid' ? `
+                        <button class="btn btn-primary btn-small" onclick="showQR('${v.code}')">
+                            📱 QR-Code anzeigen
+                        </button>
+                    ` : ''}
+                    ${v.status === 'redeemed' ? `
+                        <p style="color: #4CAF50; margin-top: 10px;">✓ Eingelöst</p>
+                    ` : ''}
                 </div>
             `).join('');
         }
 
-        // Als bezahlt markieren
         async function markAsPaid(code) {
-            if (!confirm('Gutschein als bezahlt markieren?')) return;
+            if (!confirm('Als bezahlt markieren?')) return;
 
             try {
                 const response = await fetch(BACKEND_URL, {
@@ -364,16 +363,13 @@
                     showToast('Als bezahlt markiert! ✓');
                     await loadVouchers();
                     showQR(code);
-                } else {
-                    showToast('Fehler: ' + result.error, 'error');
                 }
             } catch (error) {
-                showToast('Verbindungsfehler!', 'error');
+                showToast('Fehler!', 'error');
             }
         }
 
-        // QR-Code anzeigen
-        async function showQR(code) {
+        function showQR(code) {
             const voucher = vouchers.find(v => v.code === code);
             if (!voucher) return;
 
@@ -398,32 +394,23 @@
                 <p><strong>Partner:</strong> ${voucher.partnerName}</p>
                 <p><strong>Kunde:</strong> ${voucher.customerName}</p>
                 <p><strong>Email:</strong> ${voucher.customerEmail}</p>
-                ${voucher.description !== 'Gutschein' ? `<p><strong>Beschreibung:</strong> ${voucher.description}</p>` : ''}
             `;
 
             document.getElementById('qrModal').classList.add('active');
         }
 
-        // Modal schließen
         function closeModal() {
             document.getElementById('qrModal').classList.remove('active');
         }
 
-        // Gutschein teilen
         function shareVoucher() {
             if (!currentVoucher) return;
 
-            const text = `🎫 Gutschein-Code: ${currentVoucher.code}
-💰 Wert: ${currentVoucher.amount} CHF
-🏪 ${currentVoucher.partnerName}
+            const url = window.location.href.split('?')[0] + '?v=' + currentVoucher.code;
+            const text = `🎫 Dein Gutschein\n💰 ${currentVoucher.amount} CHF\n🏪 ${currentVoucher.partnerName}\n\n${url}`;
 
-Zeige diesen Code in der Bar oder scanne den QR-Code!`;
-
-            // WhatsApp
-            const whatsappUrl = `https://wa.me/${currentVoucher.customerEmail.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(text)}`;
-            
-            // Email
-            const emailUrl = `mailto:${currentVoucher.customerEmail}?subject=${encodeURIComponent('Dein Gutschein für ' + currentVoucher.partnerName)}&body=${encodeURIComponent(text)}`;
+            const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            const emailUrl = `mailto:${currentVoucher.customerEmail}?subject=Dein Gutschein&body=${encodeURIComponent(text)}`;
 
             if (confirm('Per WhatsApp senden? (Abbrechen = Email)')) {
                 window.open(whatsappUrl, '_blank');
@@ -432,29 +419,6 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
             }
         }
 
-        // Gutschein einlösen
-        async function redeemVoucher(code) {
-            if (!confirm('Gutschein jetzt einlösen?')) return;
-
-            try {
-                const response = await fetch(BACKEND_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'redeem', code })
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    showToast('Gutschein eingelöst! ✓');
-                    await loadVouchers();
-                } else {
-                    showToast('Fehler: ' + result.error, 'error');
-                }
-            } catch (error) {
-                showToast('Verbindungsfehler!', 'error');
-            }
-        }
-
-        // Partner-Übersicht laden
         async function loadPartners() {
             await loadVouchers();
             
@@ -465,7 +429,6 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
                         total: 0,
                         redeemed: 0,
                         commission: 0,
-                        debt: 0,
                         unpaidDebt: 0
                     };
                 }
@@ -474,7 +437,6 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
                     partners[v.partnerName].redeemed++;
                     partners[v.partnerName].total += v.amount;
                     partners[v.partnerName].commission += v.commission;
-                    partners[v.partnerName].debt += v.partnerDebt;
                     
                     if (!v.partnerPaid) {
                         partners[v.partnerName].unpaidDebt += v.partnerDebt;
@@ -486,7 +448,7 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
             const partnerNames = Object.keys(partners);
             
             if (partnerNames.length === 0) {
-                container.innerHTML = '<div class="card"><p style="text-align:center;color:#999;">Keine Partner gefunden</p></div>';
+                container.innerHTML = '<div class="card"><p style="text-align:center;color:#999;">Keine Partner</p></div>';
                 return;
             }
 
@@ -495,39 +457,32 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
                 return `
                     <div class="card">
                         <h3 style="color: #667eea; margin-bottom: 15px;">${name}</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                             <div style="text-align: center; padding: 15px; background: #f5f5f5; border-radius: 10px;">
-                                <div style="font-size: 24px; font-weight: 700; color: #667eea;">${p.redeemed}</div>
+                                <div style="font-size: 24px; font-weight: 700;">${p.redeemed}</div>
                                 <div style="font-size: 12px; color: #999;">Eingelöst</div>
-                            </div>
-                            <div style="text-align: center; padding: 15px; background: #f5f5f5; border-radius: 10px;">
-                                <div style="font-size: 24px; font-weight: 700; color: #667eea;">${p.total.toFixed(0)} CHF</div>
-                                <div style="font-size: 12px; color: #999;">Gesamtumsatz</div>
                             </div>
                             <div style="text-align: center; padding: 15px; background: #e8f5e9; border-radius: 10px;">
                                 <div style="font-size: 24px; font-weight: 700; color: #4CAF50;">${p.commission.toFixed(0)} CHF</div>
-                                <div style="font-size: 12px; color: #999;">Unsere Provision</div>
+                                <div style="font-size: 12px; color: #999;">Provision</div>
                             </div>
-                            <div style="text-align: center; padding: 15px; background: #ffebee; border-radius: 10px;">
-                                <div style="font-size: 24px; font-weight: 700; color: #f44336;">${p.unpaidDebt.toFixed(0)} CHF</div>
-                                <div style="font-size: 12px; color: #999;">Offen</div>
-                            </div>
+                        </div>
+                        <div style="text-align: center; padding: 15px; background: #ffebee; border-radius: 10px; margin-top: 10px;">
+                            <div style="font-size: 24px; font-weight: 700; color: #f44336;">${p.unpaidDebt.toFixed(0)} CHF</div>
+                            <div style="font-size: 12px; color: #999;">Offen zu zahlen</div>
                         </div>
                         ${p.unpaidDebt > 0 ? `
                             <button class="btn btn-success" onclick="markPartnerPaid('${name}')">
-                                ✓ Als bezahlt markieren (${p.unpaidDebt.toFixed(2)} CHF)
+                                ✓ Als bezahlt markieren
                             </button>
-                        ` : `
-                            <p style="text-align: center; color: #4CAF50; font-weight: 600;">✓ Alles bezahlt</p>
-                        `}
+                        ` : `<p style="text-align: center; color: #4CAF50; margin-top: 10px;">✓ Alles bezahlt</p>`}
                     </div>
                 `;
             }).join('');
         }
 
-        // Partner als bezahlt markieren
         async function markPartnerPaid(partnerName) {
-            if (!confirm(`Alle offenen Beträge für ${partnerName} als bezahlt markieren?`)) return;
+            if (!confirm(`Alle Zahlungen für ${partnerName} markieren?`)) return;
 
             try {
                 const response = await fetch(BACKEND_URL, {
@@ -537,8 +492,97 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
                 const result = await response.json();
                 
                 if (result.success) {
-                    showToast('Partner als bezahlt markiert! ✓');
+                    showToast('Partner bezahlt! ✓');
                     await loadPartners();
+                }
+            } catch (error) {
+                showToast('Fehler!', 'error');
+            }
+        }
+
+        async function showPublicVoucher(code) {
+            try {
+                const response = await fetch(BACKEND_URL + '?action=get&code=' + code);
+                const result = await response.json();
+                
+                if (!result.success || !result.voucher) {
+                    document.getElementById('publicView').innerHTML = `
+                        <div class="public-card">
+                            <div style="font-size: 80px;">❌</div>
+                            <h1 style="color: #f44336; margin: 20px 0;">Nicht gefunden</h1>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const v = result.voucher;
+                
+                if (v.status === 'redeemed') {
+                    document.getElementById('publicView').innerHTML = `
+                        <div class="public-card">
+                            <div style="font-size: 80px;">⚠️</div>
+                            <h1 style="color: #f44336; margin: 20px 0;">Bereits eingelöst</h1>
+                            <p style="color: #666;">Dieser Gutschein wurde bereits verwendet.</p>
+                        </div>
+                    `;
+                } else if (v.status === 'open') {
+                    document.getElementById('publicView').innerHTML = `
+                        <div class="public-card">
+                            <div style="font-size: 80px;">⏳</div>
+                            <h1 style="color: #856404; margin: 20px 0;">Noch nicht bezahlt</h1>
+                            <p style="color: #666;">Dieser Gutschein ist noch nicht gültig.</p>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('publicView').innerHTML = `
+                        <div class="public-card">
+                            <div style="font-size: 60px;">🎫</div>
+                            <h1 style="color: #4CAF50; margin: 20px 0;">Gültiger Gutschein</h1>
+                            <div class="voucher-amount">${v.amount} CHF</div>
+                            <div style="font-size: 20px; color: #667eea; margin-bottom: 30px;">${v.partnerName}</div>
+                            <div style="background: #f5f5f5; padding: 20px; border-radius: 15px; text-align: left; margin: 20px 0;">
+                                <p style="margin: 8px 0;"><strong>Code:</strong> ${v.code}</p>
+                                <p style="margin: 8px 0;"><strong>Kunde:</strong> ${v.customerName}</p>
+                                <p style="margin: 8px 0;"><strong>Beschreibung:</strong> ${v.description}</p>
+                            </div>
+                            <button class="btn btn-success" onclick="redeemPublic('${v.code}')">
+                                ✓ Jetzt einlösen
+                            </button>
+                            <p style="margin-top: 20px; color: #999; font-size: 14px;">
+                                Nur für ${v.partnerName} gültig
+                            </p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                document.getElementById('publicView').innerHTML = `
+                    <div class="public-card">
+                        <div style="font-size: 80px;">⚠️</div>
+                        <h1 style="color: #f44336; margin: 20px 0;">Fehler</h1>
+                    </div>
+                `;
+            }
+        }
+
+        async function redeemPublic(code) {
+            if (!confirm('Gutschein jetzt einlösen?')) return;
+
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'redeem', code })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('publicView').innerHTML = `
+                        <div class="public-card">
+                            <div style="font-size: 100px;">✓</div>
+                            <h1 style="color: #4CAF50; margin: 20px 0;">Erfolgreich eingelöst!</h1>
+                            <p style="color: #666; font-size: 18px;">Vielen Dank!</p>
+                        </div>
+                    `;
                 } else {
                     showToast('Fehler: ' + result.error, 'error');
                 }
@@ -547,92 +591,16 @@ Zeige diesen Code in der Bar oder scanne den QR-Code!`;
             }
         }
 
-        // Check URL for voucher view
         window.addEventListener('load', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const voucherCode = urlParams.get('v');
             
             if (voucherCode) {
-                // Show public voucher view
+                document.getElementById('adminView').style.display = 'none';
+                document.getElementById('publicView').style.display = 'flex';
                 showPublicVoucher(voucherCode);
             }
         });
-
-        // Public voucher view
-        async function showPublicVoucher(code) {
-            try {
-                const response = await fetch(BACKEND_URL + '?action=get&code=' + code);
-                const result = await response.json();
-                
-                if (result.success && result.voucher) {
-                    const v = result.voucher;
-                    
-                    let statusHtml = '';
-                    if (v.status === 'redeemed') {
-                        statusHtml = `
-                            <div style="background: #ffebee; padding: 40px; border-radius: 20px; text-align: center;">
-                                <div style="font-size: 80px;">⚠️</div>
-                                <h1 style="color: #f44336; margin: 20px 0;">Bereits eingelöst</h1>
-                                <p style="color: #666;">Dieser Gutschein wurde bereits am ${new Date(v.redeemedAt).toLocaleDateString('de-CH')} eingelöst.</p>
-                            </div>
-                        `;
-                    } else if (v.status === 'open') {
-                        statusHtml = `
-                            <div style="background: #fff3cd; padding: 40px; border-radius: 20px; text-align: center;">
-                                <div style="font-size: 80px;">⏳</div>
-                                <h1 style="color: #856404; margin: 20px 0;">Noch nicht bezahlt</h1>
-                                <p style="color: #666;">Dieser Gutschein wurde noch nicht bezahlt und ist nicht gültig.</p>
-                            </div>
-                        `;
-                    } else {
-                        statusHtml = `
-                            <div style="background: white; padding: 40px; border-radius: 20px; text-align: center;">
-                                <div style="font-size: 80px;">🎫</div>
-                                <h1 style="color: #4CAF50; margin: 20px 0;">Gültiger Gutschein</h1>
-                                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; color: white; margin: 30px 0;">
-                                    <div style="font-size: 48px; font-weight: 700;">${v.amount} CHF</div>
-                                    <div style="font-size: 20px; margin-top: 10px;">${v.partnerName}</div>
-                                </div>
-                                <div style="background: #f5f5f5; padding: 20px; border-radius: 15px; text-align: left;">
-                                    <p style="margin: 8px 0;"><strong>Code:</strong> ${v.code}</p>
-                                    <p style="margin: 8px 0;"><strong>Kunde:</strong> ${v.customerName}</p>
-                                    ${v.description !== 'Gutschein' ? `<p style="margin: 8px 0;"><strong>Beschreibung:</strong> ${v.description}</p>` : ''}
-                                </div>
-                                <p style="margin-top: 20px; color: #999; font-size: 14px;">
-                                    Nur für ${v.partnerName} gültig
-                                </p>
-                            </div>
-                        `;
-                    }
-                    
-                    document.body.innerHTML = `
-                        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
-                            ${statusHtml}
-                        </div>
-                    `;
-                } else {
-                    document.body.innerHTML = `
-                        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
-                            <div style="background: white; padding: 40px; border-radius: 20px; text-align: center;">
-                                <div style="font-size: 80px;">❌</div>
-                                <h1 style="color: #f44336; margin: 20px 0;">Nicht gefunden</h1>
-                                <p style="color: #666;">Dieser Gutschein existiert nicht.</p>
-                            </div>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                document.body.innerHTML = `
-                    <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
-                        <div style="background: white; padding: 40px; border-radius: 20px; text-align: center;">
-                            <div style="font-size: 80px;">⚠️</div>
-                            <h1 style="color: #f44336; margin: 20px 0;">Fehler</h1>
-                            <p style="color: #666;">Verbindung fehlgeschlagen.</p>
-                        </div>
-                    </div>
-                `;
-            }
-        }
     </script>
 </body>
 </html>
